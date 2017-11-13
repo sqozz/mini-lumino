@@ -6,9 +6,9 @@
 const uint8_t LEDMATRIX_CS_PIN = 15;
 
 // Define LED Matrix dimensions (0-n) - eg: 32x8 = 31x7
-const int LEDMATRIX_WIDTH = 31;
-const int LEDMATRIX_HEIGHT = 7;
-const int LEDMATRIX_SEGMENTS = 4;
+const int LEDMATRIX_WIDTH = 31+32;
+const int LEDMATRIX_HEIGHT = 7 + 8;
+const int LEDMATRIX_SEGMENTS = 16;
 
 // The LEDMatrixDriver class instance
 LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
@@ -16,7 +16,6 @@ Ticker scroller;
 WiFiClient mpd_client;
 
 int x=0, y=0;   // start top left
-bool s = true;  // start with led on
 int progress_height = 2;
 char stop[] = { 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0 };
 char play[] = { 0x8, 0xc, 0xe, 0xc, 0x8, 0x0 };
@@ -129,12 +128,12 @@ void setup() {
 	Serial.begin(9600);
 
 	WiFi.mode(WIFI_STA);
-	WiFi.begin(ssid, password);
+	//WiFi.begin(ssid, password);
 	display_text = "...";
 	text(display_text, 0);
-	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
-	}
+	//while (WiFi.status() != WL_CONNECTED) {
+	//	delay(500);
+	//}
 	display_text = "CON";
 	text(display_text, 0);
 }
@@ -143,51 +142,54 @@ void loop() {
 	display_text = "A";
 	scroller.attach(0.5, rotateText);
 	while (true) {
-		if (!mpd_client.connect("10.42.0.3", 6600)){
-			return;
-		}
-		String resp = mpd_client.readStringUntil('\n');
+		//if (!mpd_client.connect("10.42.0.3", 6600)){
+		//	return;
+		//}
+		//String resp = mpd_client.readStringUntil('\n');
+		//String title = "";
+		//String name = "";
+		//String state = "";
+		//if (resp.indexOf("OK") == 0) {
+		//	mpd_client.print("currentsong\n");
+		//	resp = mpd_client.readStringUntil('\n');
+		//	while (!(resp.lastIndexOf("Id") == 0)) {
+		//		if (resp.lastIndexOf("Title: ") == 0) {
+		//			title = resp.substring(7, resp.length());
+		//			Serial.println(title);
+		//		}
+		//		if (resp.lastIndexOf("Name: ") == 0) {
+		//			name = resp.substring(6, resp.length());
+		//			Serial.println(name);
+		//		}
+		//		resp = mpd_client.readStringUntil('\n');
+		//	}
+
+		//	mpd_client.print("status\n");
+		//	resp = mpd_client.readStringUntil('\n');
+		//	while (!(resp.lastIndexOf("audio") == 0) && !(resp.lastIndexOf("songid") == 0)) {
+		//		if (resp.lastIndexOf("state: ") == 0) {
+		//			state = resp.substring(7, resp.length());
+		//			Serial.println(state);
+		//		}
+		//		resp = mpd_client.readStringUntil('\n');
+		//	}
+		//}
+
+		//if (state == "play") {
+		//	status(play);
+		//} else if (state == "stop") {
+		//	status(stop);
+		//} else if (state == "pause") {
+		//	status(pause);
+		//}
+
 		String title = "";
 		String name = "";
-		String state = "";
-		if (resp.indexOf("OK") == 0) {
-			mpd_client.print("currentsong\n");
-			resp = mpd_client.readStringUntil('\n');
-			while (!(resp.lastIndexOf("Id") == 0)) {
-				if (resp.lastIndexOf("Title: ") == 0) {
-					title = resp.substring(7, resp.length());
-					Serial.println(title);
-				}
-				if (resp.lastIndexOf("Name: ") == 0) {
-					name = resp.substring(6, resp.length());
-					Serial.println(name);
-				}
-				resp = mpd_client.readStringUntil('\n');
-			}
-
-			mpd_client.print("status\n");
-			resp = mpd_client.readStringUntil('\n');
-			while (!(resp.lastIndexOf("audio") == 0) && !(resp.lastIndexOf("songid") == 0)) {
-				if (resp.lastIndexOf("state: ") == 0) {
-					state = resp.substring(7, resp.length());
-					Serial.println(state);
-				}
-				resp = mpd_client.readStringUntil('\n');
-			}
-		}
-
-		if (state == "play") {
-			status(play);
-		} else if (state == "stop") {
-			status(stop);
-		} else if (state == "pause") {
-			status(pause);
-		}
-
 		String song_text = name + ' - ' + title;
+		status(play);
 		//display_text = (char*) song_text.c_str();
 		display_text = const_cast<char*>(title.c_str());
-		text(display_text, 0);
+		//text(display_text, 0);
 
 		for (float prog = 0.0; prog <= 1.0; prog += 0.01) {
 			progress(prog);
@@ -205,27 +207,40 @@ void loop() {
 
 void progress(float prog) {
 	int progress_shown = (int)(prog * LEDMATRIX_WIDTH);
-	for (int progress_row = LEDMATRIX_HEIGHT - progress_height + 1; progress_row <= LEDMATRIX_HEIGHT; progress_row++) {
+	for (int progress_row = LEDMATRIX_HEIGHT; progress_row > LEDMATRIX_HEIGHT - progress_height; progress_row--) {
 		for (int x = 0; x <= progress_shown; x++) {
-			lmd.setPixel(x, progress_row, 1);
+			setPixel(x, progress_row, 1);
 		}
 		for (int x = progress_shown + 1; x <= LEDMATRIX_WIDTH; x++) {
-			lmd.setPixel(x, progress_row, 0);
+			setPixel(x, progress_row, 0);
 		}
 		if (progress_shown <= 1) {
-			lmd.setPixel(0, progress_row, 0);
+			setPixel(0, progress_row, 0);
 		}
 	}
 
 	lmd.display();
 }
 
+void setPixel(int x, int y, bool value) {
+	int real_x = 0;
+	int real_y = 0;
+	if (y < 8) {
+		real_x = x;
+		real_y = y;
+	} else {
+		real_x = 64 + x;
+		real_y = y - 8;
+	}
+	lmd.setPixel(real_x, real_y, value);
+}
+
 void status(char new_status[]) {
-	for (int icon_line = 7; icon_line >= 0; icon_line--) {
+	for (int icon_line = 5; icon_line >= 0; icon_line--) {
 		char line = new_status[icon_line];
 		for (int x = 0; x <= 5; x++) {
 			bool pixel_state = line & (0x20 >> x); // we want the sixth (0x20) pixel of that number)
-			lmd.setPixel(x, icon_line, pixel_state);
+			setPixel(x, icon_line + 7, pixel_state);
 		}
 	}
 	lmd.display();
@@ -240,29 +255,38 @@ void text(char text[], int offset) {
 				bool pixel_state = render_line & (0x8 >> x); // we want the fourth (0x8) pixel of that number)
 				int l_pos = (x + 7 + (c * 4)) - offset;
 				if (l_pos >= 7 && l_pos <= LEDMATRIX_WIDTH) {
-					lmd.setPixel(l_pos, line + 1, pixel_state);
+					setPixel(l_pos, line + 6, pixel_state);
 				}
 			}
 		}
 	}
 	int last_rendered = 3 + 7 + (strlen(text)*4) - offset;
+	/*
 	for (int x = last_rendered; x < LEDMATRIX_WIDTH; x++) {
 		for (int y = 0; y <= LEDMATRIX_HEIGHT - 2; y++) {
-			lmd.setPixel(x, y, 0);
+			setPixel(x, y, 0);
 		}
 	}
+	*/
 	lmd.display();
 }
 
-int current_offset = 0;
+int current_offset = -4;
 void rotateText() {
 	int max_length = strlen(display_text) * 4;
-	int overlap = max_length - (LEDMATRIX_WIDTH + 1 - 6);
-	overlap += 3;
-	if (current_offset < overlap) {
+	int px_visible = LEDMATRIX_WIDTH + 1 - 7;
+	int overlap = max_length - px_visible;
+	overlap += 0;
+	current_offset++;
+
+	if (current_offset >= overlap) {
+		text(display_text, overlap);
+		if (current_offset >= overlap + 2) {
+			current_offset = -6;
+		}
+	} else if (current_offset < 0) {
+		text(display_text, 0);
+	} else {
 		text(display_text, current_offset);
-		current_offset++;
-	} else if (current_offset >= overlap) {
-		current_offset = 0;
 	}
 }
