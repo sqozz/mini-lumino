@@ -3,23 +3,27 @@
 #include <ESP8266WiFi.h>
 #include "secrets.h"
 
+// Pin for the software CS
 const uint8_t LEDMATRIX_CS_PIN = 15;
 
-// Define LED Matrix dimensions (0-n) - eg: 32x8 = 31x7
-const int LEDMATRIX_WIDTH = 31+32;
-const int LEDMATRIX_HEIGHT = 7 + 8;
-const int LEDMATRIX_SEGMENTS = 16;
+// Define LED Matrix dimensions
+const int MODULE_HEIGHT = 8; // height of a single LED matrix module
+const int MODULE_WIDTH = 8; // width of a single LED matrix module
+const int LEDMATRIX_WIDTH = 64; // physical width of the display
+const int LEDMATRIX_HEIGHT = 16; // physical height of the display
+const int LEDMATRIX_SEGMENTS = (LEDMATRIX_WIDTH / MODULE_WIDTH) * (LEDMATRIX_HEIGHT / MODULE_HEIGHT); // total number of segments
+const int PROGRESS_HEIGHT = 2;
 
 // The LEDMatrixDriver class instance
 LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
 Ticker scroller;
 WiFiClient mpd_client;
 
-int x=0, y=0;   // start top left
-int progress_height = 2;
+int x=0, y=0;
 char stop[] = { 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0 };
 char play[] = { 0x8, 0xc, 0xe, 0xc, 0x8, 0x0 };
 char pause[] = { 0x1b, 0x1b, 0x1b, 0x1b, 0x1b, 0x0 };
+char* display_text = "";
 
 char font[][4] = {
 	{0x0, 0x0, 0x0, 0x0},
@@ -119,22 +123,20 @@ char font[][4] = {
 	{0x0, 0x5, 0xa, 0x0}
 };
 
-char* display_text = "TEST!";
-
 void setup() {
 	// init the display
 	lmd.setEnabled(true);
-	lmd.setIntensity(2);   // 0 = low, 10 = high
-	Serial.begin(9600);
+	lmd.setIntensity(2); // 0 = low, 10 = high
+	Serial.begin(9600); // init serial for debugging
+	display_text = "...";
+	text(display_text, 0);
 
 	WiFi.mode(WIFI_STA);
 	//WiFi.begin(ssid, password);
-	display_text = "...";
-	text(display_text, 0);
 	//while (WiFi.status() != WL_CONNECTED) {
 	//	delay(500);
 	//}
-	display_text = "CON";
+	display_text = "CONNECTING...";
 	text(display_text, 0);
 }
 
@@ -206,12 +208,12 @@ void loop() {
 }
 
 void progress(float prog) {
-	int progress_shown = (int)(prog * LEDMATRIX_WIDTH);
-	for (int progress_row = LEDMATRIX_HEIGHT; progress_row > LEDMATRIX_HEIGHT - progress_height; progress_row--) {
+	int progress_shown = (int)(prog * (LEDMATRIX_WIDTH - 1));
+	for (int progress_row = LEDMATRIX_HEIGHT; progress_row >= (LEDMATRIX_HEIGHT - PROGRESS_HEIGHT); progress_row--) {
 		for (int x = 0; x <= progress_shown; x++) {
 			setPixel(x, progress_row, 1);
 		}
-		for (int x = progress_shown + 1; x <= LEDMATRIX_WIDTH; x++) {
+		for (int x = progress_shown + 1; x < LEDMATRIX_WIDTH; x++) {
 			setPixel(x, progress_row, 0);
 		}
 		if (progress_shown <= 1) {
@@ -223,15 +225,16 @@ void progress(float prog) {
 }
 
 void setPixel(int x, int y, bool value) {
+	// LEDMatrixDriver is only designed to address one-matrix-heigh displays.
+	// To archive multiple stacked displays on top of each other we just fake
+	// a very long display and map y-coords >=8 onto the next segment by adding
+	// 64 to the x value
 	int real_x = 0;
 	int real_y = 0;
-	if (y < 8) {
-		real_x = x;
-		real_y = y;
-	} else {
-		real_x = 64 + x;
-		real_y = y - 8;
-	}
+
+	real_x = (((int)(y / MODULE_HEIGHT)) * LEDMATRIX_WIDTH) + x;
+	real_y = y - (((int)(y / MODULE_HEIGHT)) * MODULE_HEIGHT);
+
 	lmd.setPixel(real_x, real_y, value);
 }
 
@@ -246,35 +249,28 @@ void status(char new_status[]) {
 	lmd.display();
 }
 
-void text(char text[], int offset) {
+void text(char text[], int l_offset) {
 	for (int c = 0; c < (strlen(text)); c++) {
 		char letter = text[c];
 		for (int line = 0; line <= 3; line++) {
 			char render_line = font[((int) letter) - 32][line];
 			for (int x = 0; x <= 3; x++) {
 				bool pixel_state = render_line & (0x8 >> x); // we want the fourth (0x8) pixel of that number)
-				int l_pos = (x + 7 + (c * 4)) - offset;
-				if (l_pos >= 7 && l_pos <= LEDMATRIX_WIDTH) {
+				int l_pos = (x + 7 + (c * 4)) - l_offset;
+				if (l_pos >= 7 && l_pos < LEDMATRIX_WIDTH) {
 					setPixel(l_pos, line + 6, pixel_state);
 				}
 			}
 		}
 	}
-	int last_rendered = 3 + 7 + (strlen(text)*4) - offset;
-	/*
-	for (int x = last_rendered; x < LEDMATRIX_WIDTH; x++) {
-		for (int y = 0; y <= LEDMATRIX_HEIGHT - 2; y++) {
-			setPixel(x, y, 0);
-		}
-	}
-	*/
+
 	lmd.display();
 }
 
 int current_offset = -4;
 void rotateText() {
 	int max_length = strlen(display_text) * 4;
-	int px_visible = LEDMATRIX_WIDTH + 1 - 7;
+	int px_visible = LEDMATRIX_WIDTH - 7;
 	int overlap = max_length - px_visible;
 	overlap += 0;
 	current_offset++;
