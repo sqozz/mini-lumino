@@ -1,3 +1,5 @@
 *__pycache__*
 secrets.h
 .*.swp
+.*.swo
+build.py
