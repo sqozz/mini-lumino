@@ -12,7 +12,11 @@ const int MODULE_HEIGHT = 8; // height of a single LED matrix module
 const int MODULE_WIDTH = 8; // width of a single LED matrix module
 const int LEDMATRIX_WIDTH = 64; // physical width of the display
 const int LEDMATRIX_HEIGHT = 16; // physical height of the display
-const int LEDMATRIX_SEGMENTS = (LEDMATRIX_WIDTH / MODULE_WIDTH) * (LEDMATRIX_HEIGHT / MODULE_HEIGHT); // total number of segments
+
+// Total number of segments (automatic calculation)
+const int LEDMATRIX_SEGMENTS = (LEDMATRIX_WIDTH / MODULE_WIDTH) * (LEDMATRIX_HEIGHT / MODULE_HEIGHT);
+
+// Mini-lumino settings
 const int PROGRESS_HEIGHT = 2;
 
 // The LEDMatrixDriver class instance
@@ -180,13 +184,14 @@ void drawString(char* text, int len, int left, int top, int l_offset ) {
 		int char_offset = idx * (FONT_WIDTH + CHAR_SPACING); // current offset in px from the left for the next char
 		int c = text[idx] - 32; // ASCII char 32 ("SPACE") is the first element in the font array
 
-		int next_x = 0;
-		int next_y = 0;
+		int next_x = (left + char_offset) - l_offset;
+		int next_y = top;
 
-		// only draw if char is visible
-		if( FONT_WIDTH + CHAR_SPACING + left + char_offset > 0 ) {
-			drawSprite( font[c], left + char_offset, top, FONT_WIDTH, FONT_HEIGHT);
+		// only draw if char is in range after l_offset shift
+		if ((next_x >= left || next_x < LEDMATRIX_WIDTH) && (next_y >= top || next_y < LEDMATRIX_HEIGHT)) {
+				drawSprite( font[c], next_x, next_y, FONT_WIDTH, FONT_HEIGHT);
 		}
+
 	}
 }
 
