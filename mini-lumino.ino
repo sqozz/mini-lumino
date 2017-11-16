@@ -25,10 +25,19 @@ Ticker scroller;
 WiFiClient mpd_client;
 
 int x=0, y=0;
-char stop[] = { 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0 };
-char play[] = { 0x8, 0xc, 0xe, 0xc, 0x8, 0x0 };
-char pause[] = { 0x1b, 0x1b, 0x1b, 0x1b, 0x1b, 0x0 };
 char* display_text = "";
+
+char states[4][6] = {
+	{ 0x1f, 0x1f, 0x1f, 0x1f, 0x1f, 0x0 },
+	{ 0x8, 0xc, 0xe, 0xc, 0x8, 0x0 },
+	{ 0x1b, 0x1b, 0x1b, 0x1b, 0x1b, 0x0 },
+	{ 0x0, 0x0, 0x0, 0x0, 0x0, 0x0 },
+};
+
+#define STOP 0,
+#define PLAY 1,
+#define PAUSE 2,
+#define IDLE 3,
 
 void setup() {
 	// init the display
@@ -36,20 +45,20 @@ void setup() {
 	lmd.setIntensity(2); // 0 = low, 10 = high
 	Serial.begin(9600); // init serial for debugging
 	display_text = "...";
-	text(display_text, 0);
+	title(display_text);
 
 	WiFi.mode(WIFI_STA);
 	//WiFi.begin(ssid, password);
 	//while (WiFi.status() != WL_CONNECTED) {
 	//	delay(500);
 	//}
-	display_text = "CONNECTING...";
-	text(display_text, 0);
+	display_text = "";
+	title(display_text);
 }
 
 void loop() {
 	display_text = "A";
-	scroller.attach(0.5, rotateText);
+	//scroller.attach(0.5, rotateText);
 	while (true) {
 		//if (!mpd_client.connect("10.42.0.3", 6600)){
 		//	return;
@@ -95,7 +104,7 @@ void loop() {
 		String title = "";
 		String name = "";
 		String song_text = name + ' - ' + title;
-		status(play);
+		status(states[0]);
 		//display_text = (char*) song_text.c_str();
 		display_text = const_cast<char*>(title.c_str());
 		//text(display_text, 0);
@@ -112,6 +121,17 @@ void loop() {
 		}
 		mpd_client.stop();
 	}
+}
+
+void status(char new_status[]) {
+	for (int icon_line = 5; icon_line >= 0; icon_line--) {
+		char line = new_status[icon_line];
+		for (int x = 0; x <= 5; x++) {
+			bool pixel_state = line & (0x20 >> x); // we want the sixth (0x20) pixel of that number)
+			setPixel(x, icon_line + 5, pixel_state);
+		}
+	}
+	lmd.display();
 }
 
 void progress(float prog) {
@@ -131,47 +151,9 @@ void progress(float prog) {
 	lmd.display();
 }
 
-void setPixel(int x, int y, bool value) {
-	// LEDMatrixDriver is only designed to address one-matrix-heigh displays.
-	// To archive multiple stacked displays on top of each other we just fake
-	// a very long display and map y-coords >=8 onto the next segment by adding
-	// 64 to the x value
-	int real_x = 0;
-	int real_y = 0;
-
-	real_x = (((int)(y / MODULE_HEIGHT)) * LEDMATRIX_WIDTH) + x;
-	real_y = y - (((int)(y / MODULE_HEIGHT)) * MODULE_HEIGHT);
-
-	lmd.setPixel(real_x, real_y, value);
-}
-
-void status(char new_status[]) {
-	for (int icon_line = 5; icon_line >= 0; icon_line--) {
-		char line = new_status[icon_line];
-		for (int x = 0; x <= 5; x++) {
-			bool pixel_state = line & (0x20 >> x); // we want the sixth (0x20) pixel of that number)
-			setPixel(x, icon_line + 7, pixel_state);
-		}
-	}
-	lmd.display();
-}
-
-void text(char text[], int l_offset) {
-	//for (int c = 0; c < (strlen(text)); c++) {
-	//	char letter = text[c];
-	//	for (int line = 0; line <= 3; line++) {
-	//		char render_line = font[((int) letter) - 32][line];
-	//		for (int x = 0; x <= 3; x++) {
-	//			bool pixel_state = render_line & (0x8 >> x); // we want the fourth (0x8) pixel of that number)
-	//			int l_pos = (x + 7 + (c * 4)) - l_offset;
-	//			if (l_pos >= 7 && l_pos < LEDMATRIX_WIDTH) {
-	//				setPixel(l_pos, line + 6, pixel_state);
-	//			}
-	//		}
-	//	}
-	//}
-
-	drawString(text, strlen(text), 0, 0, 0);
+void title(char new_title[]) {
+	int l_offset = 0;
+	drawString(new_title, strlen(new_title), 8, 0, l_offset);
 	lmd.display();
 }
 
@@ -189,7 +171,7 @@ void drawString(char* text, int len, int left, int top, int l_offset ) {
 
 		// only draw if char is in range after l_offset shift
 		if ((next_x >= left || next_x < LEDMATRIX_WIDTH) && (next_y >= top || next_y < LEDMATRIX_HEIGHT)) {
-				drawSprite( font[c], next_x, next_y, FONT_WIDTH, FONT_HEIGHT);
+				drawSprite(font[c], next_x, next_y, FONT_WIDTH, FONT_HEIGHT);
 		}
 
 	}
@@ -210,23 +192,33 @@ void drawSprite( char* sprite, int x, int y, int width, int height ) {
 		mask = B10000000;
 	}
 }
+void setPixel(int x, int y, bool value) {
+	// LEDMatrixDriver is only designed to address one-matrix-heigh displays.
+	// To archive multiple stacked displays on top of each other we just fake
+	// a very long display and map y-coords >=8 onto the next segment by adding
+	// 64 to the x value
+	int real_x = (((int)(y / MODULE_HEIGHT)) * LEDMATRIX_WIDTH) + x;
+	int real_y = y - (((int)(y / MODULE_HEIGHT)) * MODULE_HEIGHT);
 
-int current_offset = -4;
-void rotateText() {
-	int max_length = strlen(display_text) * 4;
-	int px_visible = LEDMATRIX_WIDTH - 7;
-	int overlap = max_length - px_visible;
-	overlap += 0;
-	current_offset++;
-
-	if (current_offset >= overlap) {
-		text(display_text, overlap);
-		if (current_offset >= overlap + 2) {
-			current_offset = -6;
-		}
-	} else if (current_offset < 0) {
-		text(display_text, 0);
-	} else {
-		text(display_text, current_offset);
-	}
+	lmd.setPixel(real_x, real_y, value);
 }
+
+//int current_offset = -4;
+//void rotateText() {
+//	int max_length = strlen(display_text) * 4;
+//	int px_visible = LEDMATRIX_WIDTH - 7;
+//	int overlap = max_length - px_visible;
+//	overlap += 0;
+//	current_offset++;
+//
+//	if (current_offset >= overlap) {
+//		text(display_text, overlap);
+//		if (current_offset >= overlap + 2) {
+//			current_offset = -6;
+//		}
+//	} else if (current_offset < 0) {
+//		text(display_text, 0);
+//	} else {
+//		text(display_text, current_offset);
+//	}
+//}
